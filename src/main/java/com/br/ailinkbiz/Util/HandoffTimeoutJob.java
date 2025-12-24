@@ -1,7 +1,8 @@
 package com.br.ailinkbiz.Util;
 
-import com.br.ailinkbiz.model.ConversationLog;
+import com.br.ailinkbiz.logging.ConversationLogger;
 import com.br.ailinkbiz.model.ConversationState;
+import com.br.ailinkbiz.model.DecisionSource;
 import com.br.ailinkbiz.store.ConversationStore;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -9,8 +10,6 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-
-import static com.br.ailinkbiz.Util.Utils.addLog;
 
 @Component
 public class HandoffTimeoutJob {
@@ -20,8 +19,15 @@ public class HandoffTimeoutJob {
 
     private final ConversationStore conversationStore;
 
-    public HandoffTimeoutJob(ConversationStore conversationStore) {
+    private final ConversationLogger conversationLogger;
+
+
+    public HandoffTimeoutJob(
+            ConversationStore conversationStore,
+            ConversationLogger conversationLogger
+    ) {
         this.conversationStore = conversationStore;
+        this.conversationLogger = conversationLogger;
     }
 
     @Scheduled(fixedDelay = 60_000) // roda a cada 1 minuto
@@ -47,12 +53,16 @@ public class HandoffTimeoutJob {
                             ConversationState.NEW
                     );
 
-                    addLog(
+                    conversationLogger.logTurn(
+                            "DEFAULT", // clientId (fixo por enquanto)
                             user,
+                            "DEFAULT", // flow
+                            ConversationState.HUMAN_HANDOFF.name(), // step anterior
+                            "SYSTEM_TIMEOUT",
                             "Atendimento encerrado automaticamente por inatividade.",
-                            ConversationState.NEW,
-                            ConversationLog.Direction.SYSTEM
+                            DecisionSource.SYSTEM
                     );
+
                 }
             });
         }

@@ -23,18 +23,4 @@ public class Utils {
 
     }
 
-
-    public static void addLog(String from, String message, ConversationState state, ConversationLog.Direction direction) {
-
-        ConversationLogStore.add(
-                new ConversationLog(
-                        from,
-                        message,
-                        state,
-                        direction
-                )
-        );
-
-    }
-
 }
