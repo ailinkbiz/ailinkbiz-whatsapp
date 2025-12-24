@@ -47,7 +47,7 @@ public class ConversationLogController {
         String normalizedUser = normalize(user);
 
         return ConversationLogStore.getAll().stream()
-                .filter(log -> log.getFrom().equals(normalizedUser))
+                .filter(log -> log.getUserId().equals(normalizedUser))
                 .toList();
     }
 
@@ -69,7 +69,7 @@ public class ConversationLogController {
                     String user = entry.getKey();
 
                     List<ConversationLog> logs = ConversationLogStore.getAll().stream()
-                            .filter(log -> log.getFrom().equals(user))
+                            .filter(log -> log.getUserId().equals(user))
                             .toList();
 
                     LocalDateTime lastMessageAt =
@@ -96,13 +96,12 @@ public class ConversationLogController {
                                     )
                                     .reduce((a, b) -> b);
 
-                    ConversationLog last =
-                            lastUserInput.orElse(logs.get(logs.size() - 1));
+                    ConversationLog last = lastUserInput.orElse(logs.get(logs.size() - 1));
 
                     return new HandoffConversationDTO(
                             user,
                             last.getInput(),
-                            last.getTimestamp()
+                            last.getTimestamp().atZone(ZoneId.of("America/Sao_Paulo")).toLocalDateTime()
                     );
                 })
                 .toList();
@@ -129,8 +128,11 @@ public class ConversationLogController {
 
         conversationStore.saveConversation(normalized, ConversationState.NEW);
 
+        String conversationId = conversationStore.getConversationId(normalized).orElse("UNKNOWN");
+
         conversationLogger.logTurn(
-                "DEFAULT",
+                conversationId,
+                "DEFAULT", // clientId (por enquanto)
                 normalized,
                 "DEFAULT",
                 ConversationState.HUMAN_HANDOFF.name(),

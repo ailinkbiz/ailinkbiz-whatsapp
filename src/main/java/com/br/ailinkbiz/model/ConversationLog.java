@@ -2,18 +2,21 @@ package com.br.ailinkbiz.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.ToString;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
-@Data @AllArgsConstructor
+@Data
+@AllArgsConstructor
 public class ConversationLog {
 
     private String logId;
 
+    // Identifica a conversa
+    private String conversationId;
+
     // Identidade
     private String clientId;
-    private String from; // telefone normalizado
+    private String userId; // telefone normalizado
 
     // Contexto conversacional
     private String flow; // DEFAULT, SALES, SUPPORT...
@@ -27,27 +30,6 @@ public class ConversationLog {
     private DecisionSource decisionSource; // RULE | N8N | AI | HUMAN
 
     // Metadata
-    private LocalDateTime timestamp;
-
-    public enum Direction {
-        INBOUND,
-        OUTBOUND,
-        SYSTEM
-    }
+    private Instant timestamp;
 
 }
-//public class ConversationLog {
-//
-//    private final String user;
-//    private final String message;
-//    private final ConversationState state;
-//    private final Direction direction;
-//    private final LocalDateTime timestamp = LocalDateTime.now();
-//
-//    public enum Direction {
-//        INBOUND,
-//        OUTBOUND,
-//        SYSTEM
-//    }
-//
-//}

@@ -5,6 +5,7 @@ import com.br.ailinkbiz.model.DecisionSource;
 public interface ConversationLogger {
 
     void logTurn(
+            String conversationId,
             String clientId,
             String from,
             String flow,

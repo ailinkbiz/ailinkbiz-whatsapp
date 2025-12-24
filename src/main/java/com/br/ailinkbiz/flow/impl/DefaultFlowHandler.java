@@ -6,6 +6,12 @@ import com.br.ailinkbiz.flow.FlowResult;
 import com.br.ailinkbiz.model.ConversationState;
 import org.springframework.stereotype.Component;
 
+/**
+ * Fluxo padrão (default) usado quando não há
+ * fluxo específico para o clientId.
+ *
+ * Não deve conter lógica específica de cliente.
+ */
 @Component
 public class DefaultFlowHandler implements FlowHandler {
 

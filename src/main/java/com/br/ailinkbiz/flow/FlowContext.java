@@ -9,7 +9,7 @@ import lombok.Data;
 public class FlowContext {
 
     private final String clientId;
-    private final String from;
+    private final String userId;
     private final String input;
     private final ConversationState state;
 

@@ -1,5 +1,6 @@
 package com.br.ailinkbiz.controller;
 
+import com.br.ailinkbiz.Util.PhoneNormalizer;
 import com.br.ailinkbiz.flow.FlowResolver;
 import com.br.ailinkbiz.model.ConversationState;
 import com.br.ailinkbiz.service.MessageSender;
@@ -49,16 +50,20 @@ public class WhatsAppWebhookController {
 
         sender = getSender();
 
-        String from = normalizeFrom(payload);
+        String userId = PhoneNormalizer.toUserId(payload.get("From"));
+        String conversationId = conversationStore.getOrCreateConversationId(userId);
+
         body = payload.getOrDefault("Body", "").trim();
 
+        conversationStore.saveClientId(userId, clientId);
+
         state = conversationStore
-                .getState(from)
+                .getState(userId)
                 .orElse(ConversationState.NEW);
 
         FlowContext context = new FlowContext(
                 clientId,
-                from,
+                userId,
                 body,
                 state
         );
@@ -70,106 +75,28 @@ public class WhatsAppWebhookController {
         ConversationState nextState = result.getNextState();
 
         if (nextState == null) {
-            conversationStore.clearConversation(from);
+            conversationStore.clearConversation(userId);
         } else {
-            conversationStore.saveConversation(from, nextState);
+            conversationStore.saveConversation(userId, nextState);
         }
 
         conversationLogger.logTurn(
-                clientId,          // clientId (fixo por enquanto)
-                from,
-                "DEFAULT",          // flow (fixo por enquanto)
-                state.name(),       // step atual
-                body,               // input
-                resposta,           // output
-                DecisionSource.RULE // decisão por regra
+                conversationId,
+                clientId,
+                userId,
+                "DEFAULT",
+                state.name(),
+                body,
+                resposta,
+                DecisionSource.RULE
         );
 
         if (resposta != null && !resposta.isBlank()) {
-            sender.send(from, resposta);
+            sender.send(PhoneNormalizer.toWhatsApp(userId), resposta);
         }
 
         return ResponseEntity.ok().build();
 
-    }
-
-//    private String handleNew(String from) {
-//
-//        String resposta =
-//                "Olá! 👋\n" +
-//                "Sou o atendimento automático da AiLinkBiz.\n\n" +
-//                "Como posso te ajudar?\n\n" +
-//                "1️⃣ Falar com atendimento\n" +
-//                "2️⃣ Horário de funcionamento\n" +
-//                "3️⃣ Endereço";
-//
-//        conversationStore.saveConversation(from, ConversationState.WAITING_OPTION);
-//
-//        return resposta;
-//
-//    }
-//
-//    public String handleWaitingOption(String from, String body) {
-//
-//        String resposta;
-//
-//        switch (body) {
-//
-//            case "1" -> {
-//
-//                resposta =
-//                        "Perfeito! 👤\n" +
-//                        "Um atendente humano vai assumir a conversa a partir de agora.\n\n" +
-//                        "Por favor, aguarde.";
-//
-//                conversationStore.saveConversation(from, ConversationState.HUMAN_HANDOFF);
-//
-//            }
-//
-//            case "2" -> {
-//
-//                resposta = "Nosso horário é de segunda a sexta, das 9h às 18h.";
-//
-//                conversationStore.clearConversation(from);
-//
-//            }
-//
-//            case "3" -> {
-//
-//                resposta = "Estamos localizados na Rua X, número Y.";
-//
-//                conversationStore.clearConversation(from);
-//
-//            }
-//
-//            default -> {
-//
-//                resposta = "Não entendi 😕\nResponda com 1, 2 ou 3.";
-//
-//            }
-//
-//        }
-//
-//        return resposta;
-//
-//    }
-//
-//    private String handleHumanHandoff(String from) {
-//        System.out.println("Mensagem recebida em handoff humano de: " + from);
-//        return null;
-//    }
-
-    private String normalizeFrom(Map<String, String> payload) {
-
-        String from = payload.get("From").trim()
-                .replace("whatsapp:", "")
-                .replace(" ", "");
-
-        if (!from.startsWith("+")) {
-            from = "+" + from;
-        }
-
-        return "whatsapp:" + from;
     }
 
     private String resolveClientId(Map<String, String> payload) {

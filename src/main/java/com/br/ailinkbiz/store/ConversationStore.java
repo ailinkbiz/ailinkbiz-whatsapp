@@ -7,18 +7,23 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
 public class ConversationStore {
 
-    private static final String KEY_PREFIX = "conversation:whatsapp:";
+    private static final String KEY_PREFIX = "conversation:";
 
     private final StringRedisTemplate redis;
 
     public ConversationStore(StringRedisTemplate redis) {
         this.redis = redis;
     }
+
+    /* =========================
+       STATE
+       ========================= */
 
     public void saveConversation(String phone, ConversationState state) {
         String key = buildKey(phone);
@@ -38,6 +43,10 @@ public class ConversationStore {
                 : Optional.of(ConversationState.valueOf(value.toString()));
     }
 
+    /* =========================
+       LAST INTERACTION
+       ========================= */
+
     public Optional<Instant> getLastInteraction(String phone) {
         Object value = redis.opsForHash().get(buildKey(phone), "lastInteraction");
         return value == null
@@ -45,9 +54,42 @@ public class ConversationStore {
                 : Optional.of(Instant.parse(value.toString()));
     }
 
+    /* =========================
+       CONVERSATION ID
+       ========================= */
+
+    public Optional<String> getConversationId(String phone) {
+        Object value = redis.opsForHash().get(buildKey(phone), "conversationId");
+        return value == null
+                ? Optional.empty()
+                : Optional.of(value.toString());
+    }
+
+    public String getOrCreateConversationId(String phone) {
+
+        return getConversationId(phone)
+                .orElseGet(() -> {
+                    String id = UUID.randomUUID().toString();
+                    redis.opsForHash().put(
+                            buildKey(phone),
+                            "conversationId",
+                            id
+                    );
+                    return id;
+                });
+    }
+
+    /* =========================
+       CLEAR
+       ========================= */
+
     public void clearConversation(String phone) {
         redis.delete(buildKey(phone));
     }
+
+    /* =========================
+       UTILS
+       ========================= */
 
     private String buildKey(String phone) {
         return KEY_PREFIX + phone;
@@ -61,6 +103,17 @@ public class ConversationStore {
                                 redis.opsForHash().get(key, "state").toString()
                         )
                 ));
+    }
+
+    public Optional<String> getClientId(String phone) {
+        Object value = redis.opsForHash().get(buildKey(phone), "clientId");
+        return value == null
+                ? Optional.empty()
+                : Optional.of(value.toString());
+    }
+
+    public void saveClientId(String phone, String clientId) {
+        redis.opsForHash().put(buildKey(phone), "clientId", clientId);
     }
 
 }

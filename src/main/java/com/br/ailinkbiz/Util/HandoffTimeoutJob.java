@@ -36,8 +36,7 @@ public class HandoffTimeoutJob {
         Instant now = Instant.now();
 
         // percorre TODAS as conversas conhecidas no Redis
-        for (Map.Entry<String, ConversationState> entry :
-                conversationStore.getAllStates().entrySet()) {
+        for (Map.Entry<String, ConversationState> entry : conversationStore.getAllStates().entrySet()) {
 
             String user = entry.getKey();
             ConversationState state = entry.getValue();
@@ -48,13 +47,13 @@ public class HandoffTimeoutJob {
 
                 if (Duration.between(last, now).compareTo(TIMEOUT) > 0) {
 
-                    conversationStore.saveConversation(
-                            user,
-                            ConversationState.NEW
-                    );
+                    String conversationId = conversationStore.getConversationId(user).orElse("UNKNOWN");
+
+                    String clientId = conversationStore.getClientId(user).orElse("UNKNOWN");
 
                     conversationLogger.logTurn(
-                            "DEFAULT", // clientId (fixo por enquanto)
+                            conversationId,
+                            clientId,
                             user,
                             "DEFAULT", // flow
                             ConversationState.HUMAN_HANDOFF.name(), // step anterior
@@ -62,6 +61,12 @@ public class HandoffTimeoutJob {
                             "Atendimento encerrado automaticamente por inatividade.",
                             DecisionSource.SYSTEM
                     );
+
+                    conversationStore.clearConversation(user);
+//                    conversationStore.saveConversation(
+//                            user,
+//                            ConversationState.NEW
+//                    );
 
                 }
             });
