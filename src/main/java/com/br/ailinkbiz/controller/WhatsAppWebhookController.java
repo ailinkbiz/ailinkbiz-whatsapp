@@ -3,12 +3,15 @@ package com.br.ailinkbiz.controller;
 import com.br.ailinkbiz.Util.PhoneNormalizer;
 import com.br.ailinkbiz.flow.FlowResolver;
 import com.br.ailinkbiz.model.ConversationState;
+import com.br.ailinkbiz.persistence.entity.ConversationClosure;
+import com.br.ailinkbiz.repository.ConversationClosureRepository;
 import com.br.ailinkbiz.service.MessageSender;
 import com.br.ailinkbiz.store.ConversationStore;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.UUID;
 
 import static com.br.ailinkbiz.Util.Utils.getSender;
 
@@ -26,15 +29,18 @@ public class WhatsAppWebhookController {
     private final ConversationStore conversationStore;
     private final ConversationLogger conversationLogger;
     private final FlowResolver flowResolver;
+    private final ConversationClosureRepository closureRepository;
 
     public WhatsAppWebhookController(
             ConversationStore conversationStore,
             ConversationLogger conversationLogger,
-            FlowResolver flowResolver
+            FlowResolver flowResolver,
+            ConversationClosureRepository closureRepository
     ) {
         this.conversationStore = conversationStore;
         this.conversationLogger = conversationLogger;
         this.flowResolver = flowResolver;
+        this.closureRepository = closureRepository;
     }
 
     @PostMapping("/inbound")
@@ -75,7 +81,19 @@ public class WhatsAppWebhookController {
         ConversationState nextState = result.getNextState();
 
         if (nextState == null) {
+
+            // fechamento normal de fluxo (opção 2 ou 3)
+            closureRepository.save(
+                    new ConversationClosure(
+                            UUID.fromString(conversationId),
+                            clientId,
+                            userId,
+                            "FLOW_COMPLETED"
+                    )
+            );
+
             conversationStore.clearConversation(userId);
+
         } else {
             conversationStore.saveConversation(userId, nextState);
         }

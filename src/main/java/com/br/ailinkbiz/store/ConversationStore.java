@@ -14,7 +14,6 @@ import java.util.stream.Collectors;
 public class ConversationStore {
 
     private static final String KEY_PREFIX = "conversation:";
-
     private final StringRedisTemplate redis;
 
     public ConversationStore(StringRedisTemplate redis) {
