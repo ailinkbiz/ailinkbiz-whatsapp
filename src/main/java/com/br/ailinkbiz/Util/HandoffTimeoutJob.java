@@ -1,7 +1,6 @@
 package com.br.ailinkbiz.Util;
 
 import com.br.ailinkbiz.logging.ConversationLogger;
-import com.br.ailinkbiz.model.ConversationState;
 import com.br.ailinkbiz.model.DecisionSource;
 import com.br.ailinkbiz.persistence.entity.ConversationClosure;
 import com.br.ailinkbiz.repository.ConversationClosureRepository;
@@ -11,6 +10,8 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Component
@@ -37,52 +38,57 @@ public class HandoffTimeoutJob {
 
         Instant now = Instant.now();
 
-        for (var entry : conversationStore.getAllStates().entrySet()) {
+        // 🔑 Fonte da verdade: TODAS as conversas em HANDOFF
+        Set<String> handoffConversationIds =
+                conversationStore.getAllHandoffConversationIds();
 
-            String user = entry.getKey();
-            ConversationState state = entry.getValue();
+        for (String conversationId : handoffConversationIds) {
 
-            if (state != ConversationState.HUMAN_HANDOFF) continue;
+            Map<Object, Object> data =
+                    conversationStore.getConversationData(conversationId);
 
-            conversationStore.getLastInteraction(user).ifPresent(last -> {
+            Object lastInteractionObj = data.get("lastInteraction");
+            Object clientIdObj = data.get("clientId");
+            Object userObj = data.get("phone");
 
-                if (Duration.between(last, now).compareTo(TIMEOUT) > 0) {
+            if (lastInteractionObj == null || clientIdObj == null) {
+                continue;
+            }
 
-                    String conversationId =
-                            conversationStore.getConversationId(user).orElse(null);
+            Instant lastInteraction = Instant.parse(lastInteractionObj.toString());
+            String clientId = clientIdObj.toString();
+            String user = userObj != null ? userObj.toString() : "UNKNOWN";
 
-                    String clientId =
-                            conversationStore.getClientId(user).orElse("UNKNOWN");
+            if (Duration.between(lastInteraction, now).compareTo(TIMEOUT) <= 0) {
+                continue;
+            }
 
-                    if (conversationId != null) {
-                        closureRepository.save(
-                                new ConversationClosure(
-                                        UUID.fromString(conversationId),
-                                        clientId,
-                                        user,
-                                        "SYSTEM_TIMEOUT"
-                                )
-                        );
-                    }
-
-                    conversationLogger.logTurn(
-                            conversationId,
+            // 🔒 auditoria de fechamento
+            closureRepository.save(
+                    new ConversationClosure(
+                            UUID.fromString(conversationId),
                             clientId,
                             user,
-                            "DEFAULT",
-                            ConversationState.HUMAN_HANDOFF.name(),
-                            "SYSTEM_TIMEOUT",
-                            "Atendimento encerrado automaticamente por inatividade.",
-                            DecisionSource.SYSTEM
-                    );
+                            "SYSTEM_TIMEOUT"
+                    )
+            );
 
-                    conversationStore.clearConversation(user);
-                }
+            conversationLogger.logTurn(
+                    conversationId,
+                    clientId,
+                    user,
+                    "DEFAULT",
+                    "HANDOFF",
+                    "SYSTEM_TIMEOUT",
+                    "Atendimento encerrado automaticamente por inatividade.",
+                    DecisionSource.SYSTEM
+            );
 
-            });
-
+            // 🔑 fechamento canônico no domínio
+            conversationStore.closeConversation(
+                    conversationId,
+                    "SYSTEM_TIMEOUT"
+            );
         }
-
     }
-
 }

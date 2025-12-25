@@ -46,43 +46,43 @@ public class WhatsAppWebhookController {
     @PostMapping("/inbound")
     public ResponseEntity<Void> receiveMessage(@RequestParam Map<String, String> payload) {
 
-        //String clientId = "+15551234";
+        MessageSender sender = getSender();
+
         String clientId = resolveClientId(payload);
-
-        MessageSender sender;
-        String resposta = "";
-        ConversationState state;
-        String body;
-
-        sender = getSender();
-
         String userId = PhoneNormalizer.toUserId(payload.get("From"));
-        String conversationId = conversationStore.getOrCreateConversationId(userId);
+        String body = payload.getOrDefault("Body", "").trim();
 
-        body = payload.getOrDefault("Body", "").trim();
+        // 🔑 reutiliza conversa ativa ou cria nova
+        String conversationId =
+                conversationStore
+                        .getActiveConversationId(clientId, userId)
+                        .orElseGet(() -> {
+                            String id = conversationStore.createConversation(userId, clientId);
+                            conversationStore.setActiveConversation(clientId, userId, id);
+                            return id;
+                        });
 
-        conversationStore.saveClientId(userId, clientId);
-
-        state = conversationStore
-                .getState(userId)
-                .orElse(ConversationState.NEW);
+        ConversationState currentState =
+                conversationStore
+                        .getStateByConversation(conversationId)
+                        .orElse(ConversationState.NEW);
 
         FlowContext context = new FlowContext(
                 clientId,
                 userId,
                 body,
-                state
+                currentState
         );
 
         FlowHandler flowHandler = flowResolver.resolve(clientId);
         FlowResult result = flowHandler.handle(context);
 
-        resposta = result.getOutput();
+        String resposta = result.getOutput();
         ConversationState nextState = result.getNextState();
 
         if (nextState == null) {
 
-            // fechamento normal de fluxo (opção 2 ou 3)
+            // encerramento normal do fluxo
             closureRepository.save(
                     new ConversationClosure(
                             UUID.fromString(conversationId),
@@ -92,10 +92,16 @@ public class WhatsAppWebhookController {
                     )
             );
 
-            conversationStore.clearConversation(userId);
+            conversationStore.closeConversation(conversationId, "FLOW_COMPLETED");
+            conversationStore.clearActiveConversation(clientId, userId);
 
         } else {
-            conversationStore.saveConversation(userId, nextState);
+
+            conversationStore.updateState(conversationId, nextState);
+
+            if (nextState == ConversationState.HUMAN_HANDOFF) {
+                conversationStore.markHandoff(conversationId);
+            }
         }
 
         conversationLogger.logTurn(
@@ -103,18 +109,20 @@ public class WhatsAppWebhookController {
                 clientId,
                 userId,
                 "DEFAULT",
-                state.name(),
+                currentState.name(),
                 body,
                 resposta,
                 DecisionSource.RULE
         );
 
         if (resposta != null && !resposta.isBlank()) {
-            sender.send(PhoneNormalizer.toWhatsApp(userId), resposta);
+            sender.send(
+                    PhoneNormalizer.toWhatsApp(userId),
+                    resposta
+            );
         }
 
         return ResponseEntity.ok().build();
-
     }
 
     private String resolveClientId(Map<String, String> payload) {
@@ -129,5 +137,4 @@ public class WhatsAppWebhookController {
                 .replace("whatsapp:", "")
                 .replace(" ", "");
     }
-
 }

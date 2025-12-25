@@ -2,7 +2,6 @@ package com.br.ailinkbiz.service;
 
 import com.br.ailinkbiz.dto.ConversationOverviewDTO;
 import com.br.ailinkbiz.model.ConversationLog;
-import com.br.ailinkbiz.model.ConversationState;
 import com.br.ailinkbiz.model.DecisionSource;
 import com.br.ailinkbiz.store.ConversationLogStore;
 import com.br.ailinkbiz.store.ConversationStore;
@@ -11,7 +10,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 public class ConversationOverviewService {
@@ -22,52 +20,50 @@ public class ConversationOverviewService {
         this.conversationStore = conversationStore;
     }
 
-    public List<ConversationOverviewDTO> getOverview() {
+    /**
+     * Overview de conversas POR CLIENTE
+     */
+    public List<ConversationOverviewDTO> getOverview(String clientId) {
 
-        Map<String, List<ConversationLog>> logsByConversation =
-                ConversationLogStore.getAll().stream()
-                        .collect(Collectors.groupingBy(ConversationLog::getConversationId));
+        Set<String> conversationIds =
+                conversationStore.getClientConversationIds(clientId);
 
+        if (conversationIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<ConversationLog> allLogs = ConversationLogStore.getAll();
         List<ConversationOverviewDTO> result = new ArrayList<>();
 
-        for (var entry : logsByConversation.entrySet()) {
+        for (String conversationId : conversationIds) {
 
-            String conversationId = entry.getKey();
-            List<ConversationLog> logs = entry.getValue();
+            List<ConversationLog> logs =
+                    allLogs.stream()
+                            .filter(log -> conversationId.equals(log.getConversationId()))
+                            .sorted(Comparator.comparing(ConversationLog::getTimestamp))
+                            .toList();
 
-            logs.sort(Comparator.comparing(ConversationLog::getTimestamp));
+            if (logs.isEmpty()) {
+                continue;
+            }
+
+            Map<Object, Object> data =
+                    conversationStore.getConversationData(conversationId);
+
+            String phone = (String) data.get("phone");
+            String userMasked = maskUser(phone);
+
+            String rawStatus =
+                    (String) data.getOrDefault("status", "UNKNOWN");
+
+            String status = mapStatus(rawStatus);
+
+            String closeReason =
+                    "CLOSED".equals(rawStatus)
+                            ? resolveCloseReason(logs)
+                            : null;
 
             ConversationLog lastLog = logs.get(logs.size() - 1);
-
-            String userId = lastLog.getUserId();
-            String userMasked = maskUser(userId);
-
-            // conversa ativa atual do usuário (se existir)
-            Optional<String> activeConversationId =
-                    conversationStore.getConversationId(userId);
-
-            boolean isActiveConversation =
-                    activeConversationId.isPresent()
-                            && activeConversationId.get().equals(conversationId);
-
-            String status;
-            String closeReason = null;
-
-            if (isActiveConversation) {
-
-                ConversationState state =
-                        conversationStore.getState(userId).orElse(null);
-
-                if (state == ConversationState.HUMAN_HANDOFF) {
-                    status = "EM_ATENDIMENTO";
-                } else {
-                    status = "ATIVA";
-                }
-
-            } else {
-                status = "ENCERRADA";
-                closeReason = resolveCloseReason(logs);
-            }
 
             LocalDateTime lastActivity =
                     lastLog.getTimestamp()
@@ -83,7 +79,25 @@ public class ConversationOverviewService {
             ));
         }
 
+        result.sort(
+                Comparator.comparing(ConversationOverviewDTO::lastActivity)
+                        .reversed()
+        );
+
         return result;
+    }
+
+    /* =========================
+       AUXILIARES
+       ========================= */
+
+    private String mapStatus(String status) {
+        return switch (status) {
+            case "ACTIVE" -> "ATIVA";
+            case "HANDOFF" -> "EM_ATENDIMENTO";
+            case "CLOSED" -> "ENCERRADA";
+            default -> "DESCONHECIDA";
+        };
     }
 
     private String resolveCloseReason(List<ConversationLog> logs) {
@@ -98,10 +112,18 @@ public class ConversationOverviewService {
                 .orElse("Atendimento concluído");
     }
 
-    private String maskUser(String userId) {
-        if (userId == null || userId.length() < 4) return "Usuário";
-        return userId.substring(0, 3) + " •••• " +
-                userId.substring(userId.length() - 4);
+    private String maskUser(String phone) {
+
+        if (phone == null || phone.length() < 4) {
+            return "Usuário";
+        }
+
+        // remove prefixo whatsapp: se existir
+        phone = phone.replace("whatsapp:", "");
+
+        return phone.substring(0, 3)
+                + " •••• "
+                + phone.substring(phone.length() - 4);
     }
 
 }
