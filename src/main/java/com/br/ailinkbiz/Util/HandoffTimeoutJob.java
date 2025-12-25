@@ -15,7 +15,7 @@ import java.util.Map;
 public class HandoffTimeoutJob {
 
     // tempo de inatividade
-    private static final Duration TIMEOUT = Duration.ofMinutes(1);
+    private static final Duration TIMEOUT = Duration.ofMinutes(3);
 
     private final ConversationStore conversationStore;
 
@@ -63,10 +63,6 @@ public class HandoffTimeoutJob {
                     );
 
                     conversationStore.clearConversation(user);
-//                    conversationStore.saveConversation(
-//                            user,
-//                            ConversationState.NEW
-//                    );
 
                 }
             });

@@ -8,8 +8,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Fluxo padrão (default) usado quando não há
- * fluxo específico para o clientId.
- *
+ * fluxo específico para o clientId. *
  * Não deve conter lógica específica de cliente.
  */
 @Component
@@ -81,6 +80,10 @@ public class DefaultFlowHandler implements FlowHandler {
     }
 
     private FlowResult handleHumanHandoff() {
-        return new FlowResult(null, null);
+        return new FlowResult(
+                null, // não há resposta automática
+                ConversationState.HUMAN_HANDOFF // permanece no estado
+        );
     }
+
 }
